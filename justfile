@@ -1,6 +1,6 @@
 set dotenv-load
 
-year := '2021'
+year := '2022'
 env_day := env_var_or_default('DAY',`date '+%d'`)
 
 run level='1' day=env_day:
