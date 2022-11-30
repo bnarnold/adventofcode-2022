@@ -1,0 +1,26 @@
+use crate::util::*;
+
+pub fn level1(input: &str) -> usize {
+    0
+}
+
+pub fn level2(input: &str) -> usize {
+    0
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+
+    #[test]
+    fn level1_given_example() {
+        let test_input = include_str!("./test_input/day##DAY##.txt");
+        assert_eq!(level1(test_input), 0)
+    }
+
+    #[test]
+    fn level2_given_example() {
+        let test_input = include_str!("./test_input/day##DAY##.txt");
+        assert_eq!(level2(test_input), 0)
+    }
+}
