@@ -41,13 +41,13 @@ mod test {
 
     #[test]
     fn level1_given_example() {
-        let test_input = include_str!("./test_input/day02.txt");
+        let test_input = include_str!("./test_input/day2.txt");
         assert_eq!(level1(test_input), 15)
     }
 
     #[test]
     fn level2_given_example() {
-        let test_input = include_str!("./test_input/day02.txt");
+        let test_input = include_str!("./test_input/day2.txt");
         assert_eq!(level2(test_input), 12)
     }
 }
