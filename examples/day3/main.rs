@@ -14,6 +14,6 @@ fn main() {
         let session = std::env::var("SESSION")
             .context("SESSION must be set to submit")
             .unwrap();
-        let resp = submit(day, level, data, session);
+        let _ = submit(day, level, data, session);
     }
 }
