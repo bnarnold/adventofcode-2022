@@ -39,10 +39,8 @@ pub fn first_distinct_chunk(input: &str, size: usize) -> usize {
         .chars()
         .collect_vec()
         .windows(size)
-        .enumerate()
-        .find(|(_, w)| w.iter().copied().collect::<CharCounter>().result())
+        .position(|w| w.iter().copied().collect::<CharCounter>().result())
         .unwrap()
-        .0
         + size
 }
 
