@@ -4,7 +4,7 @@ year := '2022'
 env_day := env_var_or_default('DAY',`date '+%d' | sed s/^0//g`)
 
 run level='1' day=env_day:
-  cargo run --example day{{day}} -- --level {{level}}
+  cargo run --release --example day{{day}} -- --level {{level}}
 
 submit level='1' day=env_day:
   cargo run --example day{{day}} -- --level {{level}} --submit

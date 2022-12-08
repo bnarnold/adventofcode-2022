@@ -32,24 +32,24 @@ fn transpose<T>(table: Vec<Vec<T>>) -> Vec<Vec<T>> {
 
 fn set_visible<'a, T, I>(row: I)
 where
-    T: Ord + 'a + Clone,
+    T: Ord + 'a,
     I: Iterator<Item = &'a mut (T, bool)>,
 {
-    let mut acc = None;
+    let mut acc: Option<&T> = None;
     for (t, visible) in row {
-        if let Some(max_so_far) = &acc {
+        if let Some(max_so_far) = acc {
             if *t > *max_so_far {
                 *visible = true;
-                acc = Some(t.clone())
+                acc = Some(t)
             }
         } else {
             *visible = true;
-            acc = Some(t.clone())
+            acc = Some(t)
         }
     }
 }
 
-fn set_row_visible(table: &mut [Vec<(impl Ord + Clone, bool)>]) {
+fn set_row_visible(table: &mut [Vec<(impl Ord, bool)>]) {
     table.iter_mut().for_each(|row| {
         set_visible(row.iter_mut());
         set_visible(row.iter_mut().rev())
@@ -58,7 +58,7 @@ fn set_row_visible(table: &mut [Vec<(impl Ord + Clone, bool)>]) {
 
 fn set_visible_count<'a, T, I>(row: I)
 where
-    T: Ord + 'a + Clone,
+    T: Ord + 'a,
     I: Iterator<Item = &'a mut (T, usize)>,
 {
     let mut acc = Vec::new();
@@ -66,19 +66,19 @@ where
         let smaller_count = acc
             .iter()
             .rev()
-            .position(|(x, _)| *x >= *t)
+            .position(|(x, _)| *x >= t)
             .unwrap_or(acc.len());
         let visible: usize = acc
             .split_off(acc.len() - smaller_count)
             .into_iter()
-            .map(|(_, visible_count)| visible_count + 1)
+            .map(|(_, visible_count)| visible_count)
             .sum();
         *visible_count *= visible + if acc.is_empty() { 0 } else { 1 };
-        acc.push((t.clone(), visible))
+        acc.push((t, visible + 1))
     }
 }
 
-fn set_row_visible_count(table: &mut [Vec<(impl Ord + Clone, usize)>]) {
+fn set_row_visible_count(table: &mut [Vec<(impl Ord, usize)>]) {
     table.iter_mut().for_each(|row| {
         set_visible_count(row.iter_mut());
         set_visible_count(row.iter_mut().rev())
