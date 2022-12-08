@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 use crate::util::prelude::*;
 
 fn parse_with_default<T: Clone>(input: &str, default: &T) -> Vec<Vec<(u32, T)>> {
@@ -61,20 +63,25 @@ where
     T: Ord + 'a,
     I: Iterator<Item = &'a mut (T, usize)>,
 {
-    let mut acc = Vec::new();
+    // List of (height, visible trees including self) for potentially visible trees
+    let mut visible_trees: Vec<(&'a T, usize)> = Vec::new();
     for (t, visible_count) in row {
-        let smaller_count = acc
-            .iter()
-            .rev()
-            .position(|(x, _)| *x >= t)
-            .unwrap_or(acc.len());
-        let visible: usize = acc
-            .split_off(acc.len() - smaller_count)
+        let split_point = visible_trees
+            .binary_search_by(|(x, _)| {
+                if **x >= *t {
+                    Ordering::Less // Larger or equal are before split
+                } else {
+                    Ordering::Greater // Smaller are after
+                }
+            })
+            .unwrap_err(); // Can't panic since comparing never gives Equal
+        let visible: usize = visible_trees
+            .split_off(split_point)
             .into_iter()
             .map(|(_, visible_count)| visible_count)
             .sum();
-        *visible_count *= visible + if acc.is_empty() { 0 } else { 1 };
-        acc.push((t, visible + 1))
+        *visible_count *= visible + if visible_trees.is_empty() { 0 } else { 1 };
+        visible_trees.push((t, visible + 1))
     }
 }
 
