@@ -86,10 +86,12 @@ impl<const N: usize> Rope<N> {
 
     fn step(&mut self, direction: &Direction) {
         self.nodes[0].step(direction);
-        let mut last = self.nodes[0];
-        for node in self.nodes.iter_mut().skip(1) {
-            node.move_to_head(&last);
-            last = *node
+        // Due to limitations in the current implementation of GATs,
+        // we can't write a generic `for_each` function and need to iterate by hand
+        // cf https://blog.rust-lang.org/2022/10/28/gats-stabilization.html#the-borrow-checker-isnt-perfect-and-it-shows
+        let mut iter = self.nodes.pairs_mut();
+        while let Some((head, tail)) = iter.next() {
+            tail.move_to_head(head)
         }
     }
 
@@ -109,6 +111,42 @@ fn move_rope<'a, const N: usize>(moves: impl Iterator<Item = &'a Move>) -> usize
         }
     }
     seen.len()
+}
+
+struct MutPairs<'a, T> {
+    slice: &'a mut [T],
+    offset: usize,
+}
+
+trait LendingIterator {
+    type Item<'me>
+    where
+        Self: 'me;
+
+    fn next(&'_ mut self) -> Option<Self::Item<'_>>;
+}
+
+impl<'a, T: 'a> LendingIterator for MutPairs<'a, T> {
+    type Item<'me> = (&'me T, &'me mut T) where Self: 'me;
+
+    fn next(&'_ mut self) -> Option<Self::Item<'_>> {
+        self.offset += 1;
+        let (start, end) = self.slice.split_at_mut(self.offset);
+        Some((start.last().unwrap(), end.get_mut(0)?)) // Can't panic since self.offset is at least 1
+    }
+}
+
+trait PairMutable<T> {
+    fn pairs_mut(&mut self) -> MutPairs<'_, T>;
+}
+
+impl<T> PairMutable<T> for [T] {
+    fn pairs_mut(&mut self) -> MutPairs<'_, T> {
+        MutPairs {
+            slice: self,
+            offset: 0,
+        }
+    }
 }
 
 pub fn level1(input: &str) -> usize {
