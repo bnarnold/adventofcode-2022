@@ -74,7 +74,7 @@ where
                     Ordering::Greater // Smaller are after
                 }
             })
-            .unwrap_err(); // Can't panic since comparing never gives Equal
+            .unwrap_err(); // Can't panic since comparing never gives Equalcode
         let visible: usize = visible_trees
             .split_off(split_point)
             .into_iter()
