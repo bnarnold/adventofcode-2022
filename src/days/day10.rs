@@ -64,7 +64,7 @@ pub fn level2(input: &str) -> i32 {
         .into_iter()
         .map(|(i, x)| {
             if ((i as i32 - 1).rem_euclid(40) - x).abs() <= 1 {
-                '■'
+                '⣿'
             } else {
                 ' '
             }
