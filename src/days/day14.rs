@@ -24,11 +24,11 @@ impl GridPos {
     }
 
     fn neighbors(
-        &self,
+        self,
         min_x: usize,
         max_x: usize,
         max_y: usize,
-    ) -> impl Iterator<Item = Option<GridPos>> + '_ {
+    ) -> impl Iterator<Item = Option<GridPos>> {
         let x = self.x as isize;
         let y = self.y as isize;
         [(0, 1), (-1, 1), (1, 1)].into_iter().map(move |(dx, dy)| {
@@ -120,7 +120,7 @@ fn path(input: &str) -> IResult<&str, Path> {
 
 #[derive(Debug)]
 struct Grid {
-    inner: Vec<Cell<Location>>,
+    inner: Vec<Location>,
     x_offset: usize,
     length: usize,
     height: usize,
@@ -130,7 +130,7 @@ impl Display for Grid {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         for line in self.inner.chunks(self.length) {
             for pos in line.iter() {
-                pos.get().fmt(f)?
+                pos.fmt(f)?
             }
             writeln!(f)?
         }
@@ -139,67 +139,58 @@ impl Display for Grid {
 }
 
 impl Grid {
-    fn contains(&self, pos: &GridPos) -> bool {
+    fn contains(&self, pos: GridPos) -> bool {
         (self.x_offset..(self.x_offset + self.length)).contains(&pos.x)
             && (0..self.height).contains(&pos.y)
     }
-    fn get(&self, pos: &GridPos) -> Option<Location> {
+
+    fn get(&self, pos: GridPos) -> Option<&Location> {
         if self.contains(pos) {
-            self.inner
-                .get(pos.x - self.x_offset + self.length * pos.y)
-                .map(Cell::get)
+            self.inner.get(pos.x - self.x_offset + self.length * pos.y)
         } else {
             None
         }
     }
 
-    fn set(&self, pos: &GridPos, loc: Location) -> bool {
+    fn get_mut(&mut self, pos: GridPos) -> Option<&mut Location> {
         if self.contains(pos) {
             self.inner
-                .get(pos.x - self.x_offset + self.length * pos.y)
-                .map(|cell| {
-                    cell.set(loc);
-                    true
-                })
-                .unwrap_or(false)
+                .get_mut(pos.x - self.x_offset + self.length * pos.y)
         } else {
-            false
+            None
         }
     }
 
-    fn neighbors<'a, 'b: 'a>(
-        &'a self,
-        pos: &'b GridPos,
-    ) -> impl Iterator<Item = Option<(GridPos, Location)>> + 'a {
-        self.contains(pos).then_some(()).into_iter().flat_map(|_| {
-            pos.neighbors(self.x_offset, self.x_offset + self.length, self.height)
-                .map(|new_pos| {
-                    let new_pos = new_pos?;
-                    let loc = self.get(&new_pos)?;
-                    Some((new_pos, loc))
-                })
-        })
-    }
-
     fn new(paths: Vec<Path>) -> Self {
-        let Some(GridBound { left, right, top }) = 
-            paths.iter()
-                 .flat_map(|path|path.0.iter())
-                 .fold(None::<GridBound>,|acc,pos| match acc {
-                    Some(mut bounds) => {bounds.update_pos(pos); Some(bounds)},
-                    None => Some(GridBound::from_pos(pos)),
-                 })
-        else {return Self { inner: Vec::new(), x_offset: 0, length: 0, height: 0 }};
-        let length = right - left + 1;
-        let height = top + 1;
-        let mut result = Self {
-            inner: vec![Cell::new(Location::Air); length * height],
-            x_offset: left,
-            length,
-            height,
-        };
-        paths.into_iter().for_each(|path| result.add_path(path));
-        result
+        if let Some(GridBound { left, right, top }) = paths
+            .iter()
+            .flat_map(|path| path.0.iter())
+            .fold(None::<GridBound>, |acc, pos| match acc {
+                Some(mut bounds) => {
+                    bounds.update_pos(pos);
+                    Some(bounds)
+                }
+                None => Some(GridBound::from_pos(pos)),
+            })
+        {
+            let length = right - left + 1;
+            let height = top + 1;
+            let mut result = Self {
+                inner: vec![Location::Air; length * height],
+                x_offset: left,
+                length,
+                height,
+            };
+            paths.into_iter().for_each(|path| result.add_path(path));
+            result
+        } else {
+            return Self {
+                inner: Vec::new(),
+                x_offset: 0,
+                length: 0,
+                height: 0,
+            };
+        }
     }
 
     fn add_path(&mut self, Path(nodes): Path) {
@@ -210,34 +201,46 @@ impl Grid {
                 let start_y = start_pos.y.min(end_pos.y);
                 let end_y = start_pos.y.max(end_pos.y);
                 for y in start_y..=end_y {
-                    self.set(&GridPos { x: start_pos.x, y }, Location::Rock);
+                    self.get_mut(GridPos { x: start_pos.x, y })
+                        .map(|loc| *loc = Location::Rock);
                 }
             } else if start_pos.y == end_pos.y {
                 let start_x = start_pos.x.min(end_pos.x);
                 let end_x = start_pos.x.max(end_pos.x);
                 for x in start_x..=end_x {
-                    self.set(&GridPos { x, y: start_pos.y }, Location::Rock);
+                    self.get_mut(GridPos { x, y: start_pos.y })
+                        .map(|loc| *loc = Location::Rock);
                 }
             }
             start_pos = end_pos;
         }
     }
 
-    fn drop_sand(&self, start_pos: GridPos) -> bool {
-        let mut pos = start_pos;
-        'fall: loop {
-            for next in self.neighbors(&pos.clone()) {
-                match next {
-                    None => return false, // falling outside the grid
-                    Some((next_pos, Location::Air)) => {
-                        pos = next_pos; //falling to a free spot in the grid
-                        continue 'fall;
-                    }
-                    _ => {}
-                }
+    fn get_descendant_count(&mut self, start_pos: Option<GridPos>) -> ControlFlow<usize, usize> {
+        if let Some(start_pos) = start_pos {
+            match self.get(start_pos) {
+                None => ControlFlow::Break(0),
+                Some(Location::Air) => start_pos
+                    .neighbors(self.x_offset, self.x_offset + self.length, self.height)
+                    .try_fold(0, |count, child| {
+                        self.get_descendant_count(child)
+                            .map_break(|child_count| child_count + count)
+                            .map_continue(|child_count| child_count + count)
+                    })
+                    .map_continue(|count| {
+                        self.get_mut(start_pos).map(|loc| *loc = Location::Sand);
+                        count + 1
+                    }),
+                _ => ControlFlow::Continue(0),
             }
-            return self.set(&pos, Location::Sand); // no free spots below, settling
+        } else {
+            return ControlFlow::Break(0);
         }
+    }
+
+    fn get_escape_count(&mut self, start_x: usize) -> Option<usize> {
+        self.get_descendant_count(Some(GridPos { x: start_x, y: 0 }))
+            .break_value()
     }
 
     fn get_sandy_count(&self, start_x: usize) -> usize {
@@ -252,7 +255,7 @@ impl Grid {
         let mut sandy = vec![false; self.length];
         let mut sandy_count = 1;
         sandy[start_x - self.x_offset] = true;
-        let last_row: &[Cell<Location>] = &vec![Cell::new(Location::Air); self.length];
+        let last_row: &[Location] = &vec![Location::Air; self.length];
         eprintln!();
         for (i, is_sandy) in sandy.iter().enumerate() {
             eprint!(
@@ -260,7 +263,7 @@ impl Grid {
                 if *is_sandy {
                     Location::Sand
                 } else {
-                    self.inner[i].get()
+                    self.inner[i]
                 }
             );
         }
@@ -284,7 +287,7 @@ impl Grid {
                 *new_sandy.last_mut().unwrap() = true;
             }
             for (is_sandy, loc) in new_sandy.iter_mut().zip(row.iter()) {
-                *is_sandy = *is_sandy && !matches!(loc.get(), Location::Rock);
+                *is_sandy = *is_sandy && !matches!(loc, Location::Rock);
                 if *is_sandy {
                     sandy_count += 1
                 }
@@ -298,14 +301,7 @@ impl Grid {
             sandy = new_sandy;
             eprintln!();
             for (i, is_sandy) in sandy.iter().enumerate() {
-                eprint!(
-                    "{}",
-                    if *is_sandy {
-                        Location::Sand
-                    } else {
-                        row[i].get()
-                    }
-                );
+                eprint!("{}", if *is_sandy { Location::Sand } else { row[i] });
             }
         }
         eprintln!();
@@ -322,12 +318,7 @@ pub fn level1(input: &str) -> usize {
         .finish()
         .unwrap()
         .1;
-    let grid = Grid::new(paths);
-    let mut count = 0;
-    while grid.drop_sand(GridPos { x: 500, y: 0 }) {
-        count += 1;
-    }
-    count
+    Grid::new(paths).get_escape_count(500).unwrap()
 }
 
 pub fn level2(input: &str) -> usize {
