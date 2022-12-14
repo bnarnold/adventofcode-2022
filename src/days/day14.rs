@@ -1,5 +1,6 @@
-use std::{cell::Cell, fmt::Display, iter::once, ops::ControlFlow};
+use std::{fmt::Display, iter::once, ops::ControlFlow};
 
+use itertools::izip;
 use nom::{
     bytes::complete::{tag, take_while},
     character::complete::{char, digit1, line_ending},
@@ -18,12 +19,7 @@ struct GridPos {
 }
 
 impl GridPos {
-    fn dist(&self, other: &Self) -> usize {
-        ((self.x as isize - other.x as isize).abs() + (self.y as isize - other.y as isize).abs())
-            as usize
-    }
-
-    fn neighbors(
+    fn children(
         self,
         min_x: usize,
         max_x: usize,
@@ -58,10 +54,7 @@ fn usize(input: &str) -> IResult<&str, usize> {
 }
 
 fn grid_pos(input: &str) -> IResult<&str, GridPos> {
-    map(separated_pair(usize, char(','), usize), |(x, y)| GridPos {
-        x,
-        y,
-    })(input)
+    map(separated_pair(usize, char(','), usize), Into::into)(input)
 }
 
 #[derive(Debug)]
@@ -216,12 +209,14 @@ impl Grid {
         }
     }
 
+    // Continue: Sand dropped from this location gets dropped
+    // Break: Sand dropped from this location escapes
     fn get_descendant_count(&mut self, start_pos: Option<GridPos>) -> ControlFlow<usize, usize> {
         if let Some(start_pos) = start_pos {
             match self.get(start_pos) {
                 None => ControlFlow::Break(0),
                 Some(Location::Air) => start_pos
-                    .neighbors(self.x_offset, self.x_offset + self.length, self.height)
+                    .children(self.x_offset, self.x_offset + self.length, self.height)
                     .try_fold(0, |count, child| {
                         self.get_descendant_count(child)
                             .map_break(|child_count| child_count + count)
@@ -238,7 +233,7 @@ impl Grid {
         }
     }
 
-    fn get_escape_count(&mut self, start_x: usize) -> Option<usize> {
+    fn drop_sand(&mut self, start_x: usize) -> Option<usize> {
         self.get_descendant_count(Some(GridPos { x: start_x, y: 0 }))
             .break_value()
     }
@@ -252,21 +247,11 @@ impl Grid {
         // through the rows in O(length * height).
         let mut left_escape: Option<usize> = None;
         let mut right_escape: Option<usize> = None;
-        let mut sandy = vec![false; self.length];
+        let mut sandy = vec![false; self.length + 2];
         let mut sandy_count = 1;
-        sandy[start_x - self.x_offset] = true;
+        sandy[start_x - self.x_offset + 1] = true;
+        let mut stash: Vec<bool> = vec![false; self.length + 2];
         let last_row: &[Location] = &vec![Location::Air; self.length];
-        eprintln!();
-        for (i, is_sandy) in sandy.iter().enumerate() {
-            eprint!(
-                "{}",
-                if *is_sandy {
-                    Location::Sand
-                } else {
-                    self.inner[i]
-                }
-            );
-        }
         for (i, row) in self
             .inner
             .chunks(self.length)
@@ -274,37 +259,22 @@ impl Grid {
             .enumerate()
             .skip(1)
         {
-            let mut new_sandy = vec![false; self.length];
-            for (i, is_sandy) in new_sandy.iter_mut().enumerate() {
-                *is_sandy = sandy[i.saturating_sub(1)..=(i + 1).min(self.length - 1)]
-                    .iter()
-                    .any(|is_sandy| *is_sandy);
-            }
-            if left_escape.is_some() {
-                new_sandy[0] = true;
-            }
-            if right_escape.is_some() {
-                *new_sandy.last_mut().unwrap() = true;
-            }
-            for (is_sandy, loc) in new_sandy.iter_mut().zip(row.iter()) {
-                *is_sandy = *is_sandy && !matches!(loc, Location::Rock);
+            for (is_sandy, parents, loc) in izip!(stash[1..].iter_mut(), sandy.windows(3), row) {
+                *is_sandy = parents.iter().any(Clone::clone) && matches!(loc, Location::Air);
                 if *is_sandy {
                     sandy_count += 1
                 }
             }
-            if left_escape.is_none() && sandy[0] {
+            stash[0] = left_escape.is_some();
+            stash[self.length + 1] = right_escape.is_some();
+            if left_escape.is_none() && sandy[1] {
                 left_escape.replace(i);
             }
-            if right_escape.is_none() && *sandy.last().unwrap() {
+            if right_escape.is_none() && sandy[self.length] {
                 right_escape.replace(i);
             }
-            sandy = new_sandy;
-            eprintln!();
-            for (i, is_sandy) in sandy.iter().enumerate() {
-                eprint!("{}", if *is_sandy { Location::Sand } else { row[i] });
-            }
+            std::mem::swap(&mut sandy, &mut stash);
         }
-        eprintln!();
         let left_height = left_escape.map(|h| self.height + 1 - h).unwrap_or_default();
         let right_height = right_escape
             .map(|h| self.height + 1 - h)
@@ -318,7 +288,7 @@ pub fn level1(input: &str) -> usize {
         .finish()
         .unwrap()
         .1;
-    Grid::new(paths).get_escape_count(500).unwrap()
+    Grid::new(paths).drop_sand(500).unwrap()
 }
 
 pub fn level2(input: &str) -> usize {
